@@ -21,57 +21,75 @@ app = Flask(__name__)
 def home():
     return "Telegram AI Photo Bot is running!"
 
+
 client = InferenceClient(
     provider="fal-ai",
     api_key=HF_TOKEN,
 )
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! 🤖\n\n"
-        "🎨 Напиши описание — создам изображение.\n"
-        "📸 Или отправь фото с подписью, что изменить."
+        "🎨 Напиши описание — создам новую картинку.\n\n"
+        "📸 Или отправь фото с подписью — я попробую его изменить."
     )
 
-async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def generate_image(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     prompt = update.message.text
 
-    await update.message.reply_text("Генерирую изображение... 🎨")
+    await update.message.reply_text(
+        "Генерирую изображение... 🎨"
+    )
 
     try:
         image = client.text_to_image(
-            prompt,
-            model="black-forest-labs/FLUX.2-dev",
+            prompt=prompt,
+            model="black-forest-labs/FLUX.1-dev",
         )
 
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         buffer.seek(0)
 
-        await update.message.reply_photo(photo=buffer)
+        await update.message.reply_photo(
+            photo=buffer
+        )
 
     except Exception as e:
         await update.message.reply_text(
-            "Ошибка генерации:\n" + str(e)[:1000]
+            "Ошибка генерации:\n"
+            + str(e)[:1000]
         )
 
 
-async def edit_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photo = update.message.photo[-1]
-
+async def edit_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     prompt = update.message.caption
 
     if not prompt:
         await update.message.reply_text(
-            "Напиши в подписи к фото, что изменить. "
-            "Например: «Сделай кофту чёрной»."
+            "Добавь подпись к фотографии.\n\n"
+            "Например:\n"
+            "«Сделай мою кофту чёрной»"
         )
         return
 
-    await update.message.reply_text("Редактирую фото... 🖼️")
+    await update.message.reply_text(
+        "Редактирую фотографию... 📸"
+    )
 
     try:
+        photo = update.message.photo[-1]
+
         file = await photo.get_file()
+
         photo_bytes = await file.download_as_bytearray()
 
         image = client.image_to_image(
@@ -84,23 +102,39 @@ async def edit_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image.save(buffer, format="PNG")
         buffer.seek(0)
 
-        await update.message.reply_photo(photo=buffer)
+        await update.message.reply_photo(
+            photo=buffer
+        )
 
     except Exception as e:
         await update.message.reply_text(
-            "Ошибка редактирования:\n" + str(e)[:1000]
+            "Ошибка редактирования:\n"
+            + str(e)[:1000]
         )
 
 
 def run_web_server():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(
+        os.environ.get("PORT", 10000)
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
 
 
 def run_bot():
-    telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    telegram_app = (
+        Application
+        .builder()
+        .token(TELEGRAM_TOKEN)
+        .build()
+    )
 
-    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(
+        CommandHandler("start", start)
+    )
 
     telegram_app.add_handler(
         MessageHandler(
