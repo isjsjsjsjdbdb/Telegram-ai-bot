@@ -1,11 +1,18 @@
 import os
-import io
+import threading
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from huggingface_hub import InferenceClient
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 HF_TOKEN = os.environ["HF_TOKEN"]
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Telegram AI Photo Bot is running!"
 
 client = InferenceClient(
     provider="hf-inference",
@@ -15,8 +22,7 @@ client = InferenceClient(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! 🤖\n\n"
-        "Напиши, какую картинку создать.\n"
-        "Например: реалистичный BMW M5 ночью в Хельсинки"
+        "Напиши, какую картинку создать."
     )
 
 async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -30,26 +36,31 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             model="black-forest-labs/FLUX.1-schnell"
         )
 
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        buffer.seek(0)
+        filename = "generated.png"
+        image.save(filename)
 
-        await update.message.reply_photo(photo=buffer)
+        with open(filename, "rb") as photo:
+            await update.message.reply_photo(photo=photo)
 
     except Exception as e:
         await update.message.reply_text(
-            f"Ошибка генерации: {str(e)[:500]}"
+            "Ошибка: " + str(e)[:500]
         )
 
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(
+def run_bot():
+    telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, generate_image)
     )
 
-    app.run_polling()
+    telegram_app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    threading.Thread(target=run_web_server, daemon=True).start()
+    run_bot()
