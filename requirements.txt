@@ -3,3 +3,4 @@ huggingface_hub
 Flask
 Pillow
 openai
+requests
