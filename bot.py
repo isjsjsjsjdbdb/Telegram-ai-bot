@@ -15,7 +15,7 @@ def home():
     return "Telegram AI Photo Bot is running!"
 
 client = InferenceClient(
-    provider="hf-inference",
+    provider=provider="auto",
     api_key=HF_TOKEN
 )
 
