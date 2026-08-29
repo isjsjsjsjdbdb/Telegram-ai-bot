@@ -2,3 +2,4 @@ python-telegram-bot
 huggingface_hub
 Flask
 Pillow
+openai
