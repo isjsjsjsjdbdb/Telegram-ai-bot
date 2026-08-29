@@ -22,17 +22,114 @@ def home():
     return "Telegram AI Photo Bot is running!"
 
 
-client = InferenceClient(
-    provider="fal-ai",
-    api_key=HF_TOKEN,
+# AI-мозг
+brain = InferenceClient(
+    api_key=HF_TOKEN
 )
+
+# Генератор изображений
+image_client = InferenceClient(
+    provider="fal-ai",
+    api_key=HF_TOKEN
+)
+
+
+async def improve_prompt(user_prompt):
+    """
+    Превращает обычный запрос пользователя
+    в подробный prompt для генератора изображений.
+    """
+
+    system_prompt = """
+You are an expert image-generation prompt engineer.
+
+The user will write a short or imperfect request in Russian.
+
+Your job is to understand exactly what the user means
+and rewrite it as one detailed English prompt for an image generator.
+
+Rules:
+- Preserve the user's intended meaning.
+- If the user says man, make it clearly an adult male.
+- If the user says woman, make it clearly an adult female.
+- Do not change the requested subject.
+- Add useful visual details only when they do not contradict the request.
+- Make clothing, environment, lighting and composition clear.
+- Prefer photorealistic photography when the user asks for realism.
+- Do not add extra people unless requested.
+- Do not explain anything.
+- Return ONLY the final English image prompt.
+"""
+
+    response = brain.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ],
+        temperature=0.3,
+        max_tokens=500,
+    )
+
+    return response.choices[0].message.content.strip()
+
+
+async def improve_edit_prompt(user_prompt):
+    """
+    Превращает обычную просьбу пользователя
+    в точную инструкцию для редактирования фотографии.
+    """
+
+    system_prompt = """
+You are an expert image-editing prompt engineer.
+
+The user will describe in Russian what they want changed
+in an existing photograph.
+
+Rewrite the request as one precise English image-editing instruction.
+
+Rules:
+- Preserve the person's identity and face.
+- Preserve the original person's pose unless the user asks otherwise.
+- Preserve the original composition unless requested otherwise.
+- Change ONLY what the user asks to change.
+- Clearly describe the requested modification.
+- Do not invent additional changes.
+- If the user asks to change clothing, modify the clothing only.
+- Return ONLY the final English editing instruction.
+"""
+
+    response = brain.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ],
+        temperature=0.2,
+        max_tokens=400,
+    )
+
+    return response.choices[0].message.content.strip()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! 🤖\n\n"
-        "🎨 Напиши описание — создам новую картинку.\n\n"
-        "📸 Или отправь фото с подписью — я попробую его изменить."
+        "🎨 Напиши, что хочешь создать.\n"
+        "Можно писать простыми словами — я сам улучшу запрос.\n\n"
+        "📸 Или отправь фото с подписью, что изменить."
     )
 
 
@@ -40,15 +137,21 @@ async def generate_image(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    prompt = update.message.text
+    user_prompt = update.message.text
 
     await update.message.reply_text(
-        "Генерирую изображение... 🎨"
+        "🧠 Понимаю запрос и готовлю промпт..."
     )
 
     try:
-        image = client.text_to_image(
-            prompt=prompt,
+        improved_prompt = await improve_prompt(user_prompt)
+
+        await update.message.reply_text(
+            "🎨 Создаю изображение..."
+        )
+
+        image = image_client.text_to_image(
+            prompt=improved_prompt,
             model="black-forest-labs/FLUX.1-dev",
         )
 
@@ -63,7 +166,7 @@ async def generate_image(
     except Exception as e:
         await update.message.reply_text(
             "Ошибка генерации:\n"
-            + str(e)[:1000]
+            + str(e)[:1500]
         )
 
 
@@ -71,30 +174,38 @@ async def edit_photo(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    prompt = update.message.caption
+    user_prompt = update.message.caption
 
-    if not prompt:
+    if not user_prompt:
         await update.message.reply_text(
-            "Добавь подпись к фотографии.\n\n"
+            "📸 Добавь подпись к фотографии.\n\n"
             "Например:\n"
             "«Сделай мою кофту чёрной»"
         )
         return
 
     await update.message.reply_text(
-        "Редактирую фотографию... 📸"
+        "🧠 Понимаю, что нужно изменить..."
     )
 
     try:
+        improved_prompt = await improve_edit_prompt(
+            user_prompt
+        )
+
+        await update.message.reply_text(
+            "📸 Редактирую фотографию..."
+        )
+
         photo = update.message.photo[-1]
 
         file = await photo.get_file()
 
         photo_bytes = await file.download_as_bytearray()
 
-        image = client.image_to_image(
+        image = image_client.image_to_image(
             bytes(photo_bytes),
-            prompt=prompt,
+            prompt=improved_prompt,
             model="black-forest-labs/FLUX.2-dev",
         )
 
@@ -109,7 +220,7 @@ async def edit_photo(
     except Exception as e:
         await update.message.reply_text(
             "Ошибка редактирования:\n"
-            + str(e)[:1000]
+            + str(e)[:1500]
         )
 
 
